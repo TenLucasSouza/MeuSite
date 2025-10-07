@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Diagnóstico de TDAH</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        #webcam-container {
+            margin-bottom: 20px;
+        }
+        #question-container {
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        #progress {
+            margin: 10px 0;
+            width: 100%;
+            background: #ddd;
+        }
+        #progress-bar {
+            height: 20px;
+            width: 0%;
+            background: #4caf50;
+        }
+        #result {
+            font-weight: bold;
+            margin-top: 20px;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Diagnóstico de TDAH</h1>
+
+    <button onclick="init()">Iniciar Webcam</button>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+
+    <div id="question-container"></div>
+    <button onclick="confirmarResposta()">Confirmar Resposta</button>
+
+    <div id="progress">
+        <div id="progress-bar"></div>
+    </div>
+
+    <div id="result"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script>
+        const URL = "./my_model/";
+
+        let model, webcam, labelContainer, maxPredictions;
+        let currentPrediction = "";
+        let perguntaAtual = 0;
+        const respostas = [];
+        const perguntas = [
+            "Você tem dificuldade em manter o foco em tarefas ou atividades?",
+            "Você costuma agir impulsivamente sem pensar nas consequências?",
+            "Você se sente inquieto ou agitado frequentemente?",
+            "Você tem dificuldade em organizar tarefas e atividades?",
+            "Você evita ou procrastina tarefas que exigem esforço mental?",
+            "Você costuma esquecer compromissos ou obrigações do dia a dia?",
+            "Você interrompe frequentemente os outros durante conversas?",
+            "Você perde objetos necessários para tarefas (como chaves, celular)?",
+            "Você se distrai facilmente com estímulos externos?",
+            "Você sente dificuldade em finalizar tarefas iniciadas?"
+        ];
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            const flip = true;
+            webcam = new tmImage.Webcam(200, 200, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            labelContainer.innerHTML = "<div>Detectando resposta...</div>";
+
+            mostrarPergunta();
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+
+            // Seleciona a classe com maior probabilidade
+            prediction.sort((a, b) => b.probability - a.probability);
+            currentPrediction = prediction[0].className;
+
+            labelContainer.innerHTML = `<div>Resposta detectada: <strong>${currentPrediction}</strong></div>`;
+        }
+
+        function mostrarPergunta() {
+            if (perguntaAtual < perguntas.length) {
+                document.getElementById("question-container").innerText =
+                    `Pergunta ${perguntaAtual + 1}: ${perguntas[perguntaAtual]}`;
+                atualizarBarraProgresso();
+            } else {
+                finalizarDiagnostico();
+            }
+        }
+
+        function confirmarResposta() {
+            if (!currentPrediction) return;
+
+            respostas.push(currentPrediction);
+            perguntaAtual++;
+            mostrarPergunta();
+        }
+
+        function atualizarBarraProgresso() {
+            const progresso = (perguntaAtual / perguntas.length) * 100;
+            document.getElementById("progress-bar").style.width = progresso + "%";
+        }
+
+        function finalizarDiagnostico() {
+            webcam.stop();
+            document.getElementById("question-container").innerText = "Diagnóstico finalizado.";
+            document.getElementById("label-container").innerHTML = "";
+
+            const respostasSim = respostas.filter(r => r === "Sim").length;
+            let resultado = "";
+
+            if (respostasSim >= 6) {
+                resultado = "Alto indicativo de TDAH. Consulte um profissional de saúde.";
+            } else if (respostasSim >= 3) {
+                resultado = "Possível indicativo de TDAH. Avaliação recomendada.";
+            } else {
+                resultado = "Baixo indicativo de TDAH.";
+            }
+
+            document.getElementById("result").innerText = `Respostas 'Sim': ${respostasSim}/10\n${resultado}`;
+        }
+    </script>
+</body>
+</html>
